@@ -7,6 +7,17 @@ import io
 
 # FastAPI app initialization
 app = FastAPI()
+# FastAPI app initialization
+app = FastAPI()
+
+# Enable CORS for all origins and POST/GET methods
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # THIS IS THE CRITICAL LINE
+    allow_credentials=True,
+    allow_methods=["POST", "GET"],
+    allow_headers=["*"],
+)
 
 # Enable CORS for all origins and POST/GET methods
 app.add_middleware(
