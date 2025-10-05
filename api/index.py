@@ -1,3 +1,4 @@
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -25,26 +26,11 @@ class Query(BaseModel):
     threshold_ms: int
 
 # --- 4. Telemetry Data (Pure Python Structure) ---
-TELEMETRY_DATA_CSV = """
-timestamp,region,latency_ms,uptime_status
-2025-01-01 08:00:00,us-east,150,UP
-2025-01-01 08:00:05,emea,160,UP
-2025-01-01 08:00:10,apac,185,UP
-2025-01-01 08:00:15,us-west,140,UP
-2025-01-01 08:00:20,emea,175,UP
-2025-01-01 08:00:25,apac,165,UP
-2025-01-01 08:00:30,us-east,155,UP
-2025-01-01 08:00:35,emea,190,DOWN
-2025-01-01 08:00:40,apac,150,UP
-2025-01-01 08:00:45,us-west,145,UP
-2025-01-01 08:00:50,emea,160,UP
-2025-01-01 08:01:00,us-east,170,UP
-"""
-
-def parse_telemetry_data(csv_data):
-    """Parses the CSV string into a dictionary of regions -> records."""
+def parse_telemetry_data_from_file(file_path):
+    """Parses the CSV file into a dictionary of regions -> records."""
     data = {}
-    lines = csv_data.strip().split('\n')[1:]
+    with open(file_path, 'r') as f:
+        lines = f.read().strip().split('\n')[1:]
     for line in lines:
         parts = line.split(',')
         if len(parts) == 4:
@@ -58,7 +44,13 @@ def parse_telemetry_data(csv_data):
             data[region].append({'latency': latency, 'is_up': is_up})
     return data
 
-TELEMETRY_RECORDS = parse_telemetry_data(TELEMETRY_DATA_CSV)
+# Determine the absolute path to the CSV file
+# Correctly constructs the path to the CSV file, which is in the 'data' subdirectory relative to this script.
+# Vercel copies the 'api' directory, so we need to make sure the path is relative to this script's location.
+current_dir = os.path.dirname(os.path.abspath(__file__))
+TELEMETRY_DATA_FILE = os.path.join(current_dir, 'data', 'telemetry.csv')
+
+TELEMETRY_RECORDS = parse_telemetry_data_from_file(TELEMETRY_DATA_FILE)
 
 
 def calculate_p95(data: List[int]) -> float:
