@@ -1,113 +1,74 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Dict, Any, List
-import statistics
+from typing import List
 
-# --- 1. FastAPI app initialization (Global Instance) ---
 app = FastAPI()
 
-# --- 2. FORCEFULLY ENABLE CORS MIDDLEWARE ---
-# This must be the first thing applied to the app instance.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows ALL origins for the * Access-Control-Allow-Origin: * header
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["POST", "GET"], # Allows POST and GET methods
+    allow_methods=["*"],
     allow_headers=["*"],
 )
-# --- END CORS SETUP ---
 
+class Answer(BaseModel):
+    question_id: int
+    answer: str
 
-# --- 3. Data Models ---
-class Query(BaseModel):
-    regions: List[str]
-    threshold_ms: int
+class QuizSubmission(BaseModel):
+    answers: List[Answer]
 
-# --- 4. Telemetry Data (Pure Python Structure) ---
-TELEMETRY_DATA_CSV = """
-timestamp,region,latency_ms,uptime_status
-2025-01-01 08:00:00,us-east,150,UP
-2025-01-01 08:00:05,emea,160,UP
-2025-01-01 08:00:10,apac,185,UP
-2025-01-01 08:00:15,us-west,140,UP
-2025-01-01 08:00:20,emea,175,UP
-2025-01-01 08:00:25,apac,165,UP
-2025-01-01 08:00:30,us-east,155,UP
-2025-01-01 08:00:35,emea,190,DOWN
-2025-01-01 08:00:40,apac,150,UP
-2025-01-01 08:00:45,us-west,145,UP
-2025-01-01 08:00:50,emea,160,UP
-2025-01-01 08:01:00,us-east,170,UP
-"""
+QUIZ_QUESTIONS = [
+    {
+        "id": 1,
+        "question": "Who is called the Father of Genetics?",
+        "options": ["Gregor Mendel", "Charles Darwin", "Jean-Baptiste Lamarck", "Watson and Crick"],
+        "answer": "Gregor Mendel"
+    },
+    {
+        "id": 2,
+        "question": "Who proposed the theory of natural selection?",
+        "options": ["Gregor Mendel", "Charles Darwin", "Jean-Baptiste Lamarck", "Watson and Crick"],
+        "answer": "Charles Darwin"
+    },
+    {
+        "id": 3,
+        "question": "Who is known for the Lamarckian theory of evolution?",
+        "options": ["Gregor Mendel", "Charles Darwin", "Jean-Baptiste Lamarck", "Watson and Crick"],
+        "answer": "Jean-Baptiste Lamarck"
+    },
+    {
+        "id": 4,
+        "question": "Which duo discovered the DNA double helix?",
+        "options": ["Gregor Mendel", "Charles Darwin", "Jean-Baptiste Lamarck", "Watson and Crick"],
+        "answer": "Watson and Crick"
+    }
+]
 
-def parse_telemetry_data(csv_data):
-    """Parses the CSV string into a dictionary of regions -> records."""
-    data = {}
-    lines = csv_data.strip().split('\n')[1:]
-    for line in lines:
-        parts = line.split(',')
-        if len(parts) == 4:
-            region = parts[1].lower()
-            latency = int(parts[2])
-            is_up = 1 if parts[3] == 'UP' else 0
-            
-            if region not in data:
-                data[region] = []
-            
-            data[region].append({'latency': latency, 'is_up': is_up})
-    return data
+@app.get("/api/quiz")
+def get_quiz():
+    # Return questions without the answers
+    return [{"id": q["id"], "question": q["question"], "options": q["options"]} for q in QUIZ_QUESTIONS]
 
-TELEMETRY_RECORDS = parse_telemetry_data(TELEMETRY_DATA_CSV)
+@app.post("/api/quiz/submit")
+def submit_quiz(submission: QuizSubmission):
+    score = 0
+    results = []
+    for answer in submission.answers:
+        question = next((q for q in QUIZ_QUESTIONS if q["id"] == answer.question_id), None)
+        if question:
+            is_correct = question["answer"] == answer.answer
+            if is_correct:
+                score += 1
+            results.append({
+                "question_id": answer.question_id,
+                "is_correct": is_correct,
+                "correct_answer": question["answer"]
+            })
+    return {"score": score, "results": results, "total": len(QUIZ_QUESTIONS)}
 
-
-def calculate_p95(data: List[int]) -> float:
-    """Calculates the 95th percentile latency using pure Python."""
-    if not data:
-        return 0.0
-    data_sorted = sorted(data)
-    index = int(0.95 * len(data_sorted))
-    if index >= len(data_sorted):
-        index = len(data_sorted) - 1
-    
-    return float(data_sorted[index])
-
-
-# --- 5. REQUIRED POST ENDPOINT: /app/latency ---
-@app.post("/app/latency") 
-async def get_deployment_metrics(query: Query) -> Dict[str, Any]:
-    results = {}
-    threshold = query.threshold_ms
-    
-    for region in query.regions:
-        region_key = region.lower()
-        records = TELEMETRY_RECORDS.get(region_key)
-
-        if not records:
-            results[region] = {"error": "Region not found in telemetry data."}
-            continue
-
-        latencies = [r['latency'] for r in records]
-        uptimes = [r['is_up'] for r in records]
-
-        # Calculate metrics
-        avg_latency = round(statistics.mean(latencies), 2)
-        p95_latency = round(calculate_p95(latencies), 2)
-        avg_uptime = round(statistics.mean(uptimes), 4)
-        breaches = sum(1 for latency in latencies if latency > threshold)
-
-        results[region] = {
-            "avg_latency": avg_latency,
-            "p95_latency": p95_latency,
-            "avg_uptime": avg_uptime,
-            "breaches": int(breaches)
-        }
-        
-    return results
-
-# --- 6. Vercel Health Check Endpoint ---
 @app.get("/")
 def read_root():
-    # This path is working, so the app is starting up correctly.
-    return {"message": "eShopCo Metrics Service is Ready."}
-
+    return {"message": "Genetics Quiz API is running."}
